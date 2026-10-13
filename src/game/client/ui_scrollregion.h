@@ -123,6 +123,11 @@ private:
 	CUIRect m_RailRect;
 	CUIRect m_LastAddedRect; // saved for ScrollHere()
 	float m_SliderGrabPos; // where did user grab the slider
+	vec2 m_ContentDragStartPos;
+	bool m_ContentDragCandidate;
+	bool m_ContentDragging;
+	bool m_ContentDragInertia;
+	float m_ContentDragVelocity;
 	float m_ContentScrollOffset;
 	CScrollRegionParams m_Params;
 
@@ -157,6 +162,7 @@ private:
 	CUIRect SplitContentArea();
 	void DrawBackground(const CUIRect &ScrollbarBg);
 	void DoScrollInput();
+	void DoContentDrag();
 	void UpdateHotScrollRegion();
 	void AdvanceAnimation();
 	void DoSlider();

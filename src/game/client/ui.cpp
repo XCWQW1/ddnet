@@ -236,7 +236,7 @@ void CUi::Update()
 	}
 
 	m_MousePos = m_UpdatedMousePos * vec2(pScreen->w, pScreen->h) / WindowSize;
-	m_MouseDelta = m_UpdatedMouseDelta;
+	m_MouseDelta = m_UpdatedMouseDelta * vec2(pScreen->w, pScreen->h) / WindowSize;
 	m_UpdatedMouseDelta = vec2(0.0f, 0.0f);
 	m_LastMouseButtons = m_MouseButtons;
 	m_MouseButtons = m_UpdatedMouseButtons;

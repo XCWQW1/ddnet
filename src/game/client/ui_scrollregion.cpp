@@ -28,6 +28,11 @@ void CScrollRegion::Reset()
 
 	m_ContentAreaRect = m_RailRect = m_LastAddedRect = CUIRect{0.0f, 0.0f, 0.0f, 0.0f};
 	m_SliderGrabPos = 0.0f;
+	m_ContentDragStartPos = vec2(0.0f, 0.0f);
+	m_ContentDragCandidate = false;
+	m_ContentDragging = false;
+	m_ContentDragInertia = false;
+	m_ContentDragVelocity = 0.0f;
 	m_ContentScrollOffset = 0.0f;
 	m_Params = CScrollRegionParams();
 }
@@ -62,6 +67,7 @@ void CScrollRegion::End()
 		return;
 
 	DoScrollInput();
+	DoContentDrag();
 	UpdateHotScrollRegion();
 	AdvanceAnimation();
 	DoSlider();
@@ -160,7 +166,7 @@ bool CScrollRegion::Animating() const
 
 bool CScrollRegion::Active() const
 {
-	return Ui()->ActiveItem() == &m_ScrollPos;
+	return Ui()->ActiveItem() == &m_ScrollPos || Ui()->ActiveItem() == &m_ContentDragCandidate;
 }
 
 float CScrollRegion::ContentAreaPos() const
@@ -255,6 +261,76 @@ void CScrollRegion::DoScrollInput()
 			m_AnimTargetScrollPos = (ProgrammaticScroll ? m_ScrollPos : m_AnimTargetScrollPos) + (int)m_ScrollDirection * ScrollUnit * m_ScrollSpeedMultiplier;
 			m_ScrollDirection = SCROLLRELATIVE_NONE;
 			m_ScrollSpeedMultiplier = 1.0f;
+		}
+	}
+}
+
+void CScrollRegion::DoContentDrag()
+{
+	const void *pId = &m_ContentDragCandidate;
+	const bool InsideContent = Ui()->MouseHovered(&m_ContentAreaRect);
+	const bool WasActive = Ui()->ActiveItem() == pId;
+	const bool WasDragging = m_ContentDragging;
+
+	if(!Ui()->MouseButton(0))
+	{
+		if(WasActive)
+			Ui()->SetActiveItem(nullptr);
+		m_ContentDragCandidate = false;
+		m_ContentDragging = false;
+		m_ContentDragInertia = WasDragging || m_ContentDragInertia;
+		if(!m_ContentDragInertia)
+			m_ContentDragVelocity = 0.0f;
+		if(!m_ContentDragInertia)
+			return;
+	}
+	else if(!m_ContentDragCandidate && InsideContent && Ui()->MouseButtonClicked(0))
+	{
+		m_ContentDragStartPos = Ui()->MousePos();
+		m_ContentDragCandidate = true;
+		m_ContentDragging = false;
+		m_ContentDragInertia = false;
+		m_ContentDragVelocity = 0.0f;
+	}
+
+	if(m_ContentDragCandidate && !m_ContentDragging && Ui()->MouseButton(0) &&
+		distance(m_ContentDragStartPos, Ui()->MousePos()) > 5.0f * Ui()->PixelSize())
+	{
+		// Ignore small movement so a click does not start dragging.
+		Ui()->SetActiveItem(nullptr);
+		Ui()->SetActiveItem(pId);
+		m_ContentDragging = true;
+		m_ContentDragInertia = false;
+		m_ContentDragVelocity = 0.0f;
+		m_AnimTime = 0.0f;
+		m_AnimTargetScrollPos = m_ScrollPos;
+	}
+
+	if(m_ContentDragging)
+	{
+		const vec2 MouseDelta = Ui()->MouseDelta();
+		const float FrameTime = Client()->RenderFrameTime();
+		const float CurrentVelocity = FrameTime > 0.0f ? (m_Params.m_ScrollHorizontal ? -MouseDelta.x : -MouseDelta.y) / FrameTime : 0.0f;
+		const float VelocityBlend = std::min(1.0f, FrameTime * 15.0f);
+		m_ContentDragVelocity += (CurrentVelocity - m_ContentDragVelocity) * VelocityBlend;
+		m_ScrollPos = std::clamp(m_ScrollPos - (m_Params.m_ScrollHorizontal ? MouseDelta.x : MouseDelta.y), 0.0f, MaxScroll());
+		m_AnimTargetScrollPos = m_ScrollPos;
+		m_ContentScrollOffset = -m_ScrollPos;
+	}
+	else if(m_ContentDragInertia)
+	{
+		const float FrameTime = Client()->RenderFrameTime();
+		m_ContentDragVelocity *= std::exp(-5.0f * FrameTime);
+		if(absolute(m_ContentDragVelocity) < 1.0f)
+		{
+			m_ContentDragInertia = false;
+			m_ContentDragVelocity = 0.0f;
+		}
+		else
+		{
+			m_ScrollPos = std::clamp(m_ScrollPos + m_ContentDragVelocity * FrameTime, 0.0f, MaxScroll());
+			m_AnimTargetScrollPos = m_ScrollPos;
+			m_ContentScrollOffset = -m_ScrollPos;
 		}
 	}
 }
